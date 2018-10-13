@@ -1,3 +1,9 @@
+## 相比原版的改动点
+登录方式改为读取cookies.json
+图片上传改为读取url
+适应海外使用weibo.com地址改为www.weibo.com
+
+
 # SinaWeibo
 >python3脚本,非官方API实现登录新浪微博发送消息和图片
 
