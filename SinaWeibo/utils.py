@@ -43,7 +43,7 @@ class WbUtils(object):
             'rsakv': pre_login['rsakv'],
             'encoding': 'UTF-8',
             'prelt': '53',
-            'url': 'http://weibo.com/ajaxlogin.php?framelogin=1&callback=parent.si' 'naSSOController.feedBackUrlCallBack',
+            'url': 'http://www.weibo.com/ajaxlogin.php?framelogin=1&callback=parent.si' 'naSSOController.feedBackUrlCallBack',
             'returntype': 'META'
         }
         return data
@@ -75,7 +75,7 @@ class WbUtils(object):
 
     def checkResultMessage(resultJson):
         resultFlag = False
-        resultObject = json.loads(resultJson)
+        resultObject = json.loads(resultJson.decode('utf-8'))
         try:
             code = resultObject['code']
             msg = resultObject['msg']
