@@ -7,6 +7,9 @@ import re
 import time
 import requests
 from .utils import WbUtils
+from requests.cookies import RequestsCookieJar
+import urllib
+from requests import Request
 
 WBCLIENT = 'ssologin.js(v1.4.19)'
 user_agent = (
@@ -36,19 +39,18 @@ class Weibo(object):
 
     def __login(self):
         try:
-            resp = self.session.get('https://login.sina.com.cn/sso/prelogin.php?entry=weibo&callback=sinaSSOController.preloginCallBack&su=%s&rsakt=mod&checkpin=1&client=%s' %
-                                    (base64.b64encode(self.logincode.encode('utf-8')), WBCLIENT)
-            )
-            pre_login = json.loads(re.match(r'[^{]+({.+?})', resp.text).group(1))
-            resp = self.session.post( 'https://login.sina.com.cn/sso/login.php?client=%s' %
-                                      WBCLIENT, data=WbUtils.getLoginStructure(self.logincode,self.password,pre_login)
-            )
-            crossdomain2 = re.search('(https://[^;]*)',resp.text).group(1)
-            resp = self.session.get(crossdomain2)
-            passporturl = re.search("(https://passport[^\"]*)",resp.text.replace('\/', '/')).group(0)
-            resp = self.session.get(passporturl)
-            login_info = json.loads(re.search('\((\{.*\})\)', resp.text).group(1))
-            self.uid = login_info["userinfo"]["uniqueid"]
+            with open('cookies.json', 'r', encoding='utf-8') as f:
+                    listCookies = json.loads(f.read())
+
+            cookies=RequestsCookieJar()
+
+            for cookie in listCookies:
+                cookies[cookie['name']]=cookie['value']
+            
+            self.session.cookies = cookies
+            
+            self.uid = "你的uid"
+
             print("%s 登录成功"%self.logincode)
         except Exception as e:
             print("%s 登录失败"%self.logincode)
@@ -58,8 +60,9 @@ class Weibo(object):
         return "logincode:%s,password:%s,uid:%s,url:%s"%(self.logincode,self.password,self.uid,self.homeUrl)
 
     def userInfo(self):
-        resp = self.session.get("https://weibo.com/")
+        resp = self.session.get("https://www.weibo.com/")
         self.homeUrl = resp.url
+        print(self.homeUrl)
         self.baseUrl = self.homeUrl[:self.homeUrl.index("home")-1]
         fmDict = WbUtils.getFMViewObjDict(resp.text)
         follow, fans, weibo = WbUtils.getMyInfo(fmDict)
@@ -67,13 +70,18 @@ class Weibo(object):
 
     def __postData(self,data):
         currTime = "%d" % (time.time()*1000)
-        self.session.headers["Host"]="weibo.com"
-        self.session.headers["Origin"]="https://weibo.com"
+        self.session.headers["Host"]="www.weibo.com"
+        self.session.headers["Origin"]="https://www.weibo.com"
         Referer = "https://www.weibo.com/u/%s/home?wvr=5" % self.uid
         self.session.headers["Referer"] = Referer
         resp = self.session.post(
-            'https://weibo.com/aj/mblog/add?ajwvr=6&__rnd=%s'%currTime,data = data
+            'https://www.weibo.com/aj/mblog/add?ajwvr=6&__rnd=%s'%currTime,data = data
         )
+        #req = Request('POST','https://www.weibo.com/aj/mblog/add?ajwvr=6&__rnd=%s'%currTime,data=data)
+        #prepped = self.session.prepare_request(req)
+        #print('\n'.join(['%s:%s' % item for item in prepped.__dict__.items()]))
+        #resp = self.session.send(prepped)
+        print('\n'.join(['%s:%s' % item for item in resp.request.__dict__.items()]))
         try:
             result, msg, txt= WbUtils.checkResultMessage(resp.content)
             if result == True:
@@ -88,15 +96,16 @@ class Weibo(object):
         self.__postData(WbUtils.getTextStructure(message))
 
     def uploadPic(self,picPath):
-        url = 'weibo.com/u/' + self.uid
+        url = 'www.weibo.com/u/' + self.uid
         self.session.headers["Referer"] = self.homeUrl
         self.session.headers["Host"] = "picupload.weibo.com"
-        self.session.headers["Origin"] = "https://weibo.com"
+        self.session.headers["Origin"] = "https://www.weibo.com"
         resp = self.session.post(
             'https://picupload.weibo.com/interface/pic_upload.php?app=miniblog' +
             '&data=1&url=' + url + '&markpos=1&logo=1&nick=&marks=1&url=' + url +
             '&mime=image/png&ct=' + str(random.random()),
-            data=open(picPath, 'rb')
+           # data=open(picPath, 'rb')
+            data = urllib.request.urlopen(picPath).read()
         )
         resultJson = json.loads(re.search('{"code.*', resp.text).group(0))
         return resultJson["data"]["pics"]["pic_1"]["pid"]
@@ -108,21 +117,21 @@ class Weibo(object):
         self.__postData(WbUtils.getImageStructure(message,"|".join(picList),len(picList)))
 
     def getFollowList(self,pageNum=1):
-        url = "https://weibo.com/p/100505%s/myfollow?t=1&cfs=&Pl_Official_RelationMyfollow__93_page=%d#Pl_Official_RelationMyfollow__93"%(self.uid,pageNum)
+        url = "https://www.weibo.com/p/100505%s/myfollow?t=1&cfs=&Pl_Official_RelationMyfollow__93_page=%d#Pl_Official_RelationMyfollow__93"%(self.uid,pageNum)
         resp = self.session.get(url)
         fmDict = WbUtils.getFMViewObjDict(resp.text)
         followList,pageCount = WbUtils.getFollowList(fmDict)
         return followList,pageNum < pageCount
 
     def getFansList(self,pageNum=1):
-        url = "https://weibo.com/%s/fans?cfs=600&relate=fans&t=1&f=1&type=&Pl_Official_RelationFans__88_page=%d#Pl_Official_RelationFans__88"%(self.uid,pageNum)
+        url = "https://www.weibo.com/%s/fans?cfs=600&relate=fans&t=1&f=1&type=&Pl_Official_RelationFans__88_page=%d#Pl_Official_RelationFans__88"%(self.uid,pageNum)
         resp = self.session.get(url)
         fmDict = WbUtils.getFMViewObjDict(resp.text)
         fansList, pageCount = WbUtils.getFansList(fmDict)
         return fansList, pageNum < pageCount
 
     def __getMyBlogList(self,pageNum,pagebar = 0):
-        url = "https://weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=100505&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1" \
+        url = "https://www.weibo.com/p/aj/v6/mblog/mbloglist?ajwvr=6&domain=100505&is_search=0&visible=0&is_all=1&is_tag=0&profile_ftype=1" \
             "&pl_name=Pl_Official_MyProfileFeed__21&id=1005051656558815&script_uri=&feed_type=0" \
             "&page=%d&pagebar=%d&pre_page=1&domain_op=100505&__rnd=1516869103198"%(pageNum,pagebar)
         resp = self.session.get(url)
